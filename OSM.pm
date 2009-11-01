@@ -29,6 +29,18 @@ sub one_degree_lon {
     return $one_degree_lon_at_equator * $cosine;
 }
 
+# Distance in metres between two points.
+sub distance {
+    my ($lat1, $lon1, $lat2, $lon2) = @_;
+    my $lat_diff = abs($lat1 - $lat2);
+    my $lon_diff = abs($lon1 - $lon2);
+    my $average_lat = ($lat1 + $lat2) / 2;
+    my $average_lon = ($lon1 + $lon2) / 2;
+    my $height = $lat_diff * one_degree_lat($average_lat, $average_lon);
+    my $width = $lon_diff * one_degree_lon($average_lat, $average_lon);
+    return sqrt($height ** 2 + $width ** 2);
+}
+
 # Utility functions to convert width and height to degrees of
 # longitude and latitude respectively.  Pass the the lat,lon of the
 # position you're interested in.
