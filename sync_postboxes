@@ -24,6 +24,9 @@ foreach (read_file $postboxes_data_file) {
     @h{qw(ref postcode loc1 loc2 lat lon)} = split /\t/;
     next unless $h{ref} =~ /\A$postcode_prefix\s/o;
     die unless $h{postcode} =~ /\A$postcode_prefix\s/o;
+    foreach (keys %h) {
+	delete $h{$_} if $h{$_} !~ /\S/;
+    }
     push @postbox_data, \%h;
     say "adding pobox at $h{lat} $h{lon}";
 }
@@ -100,5 +103,60 @@ foreach my $d (keys %closest_osm_to_dracos) {
 	push @unambiguous, [ $d, $o ];
     }
 }
-use Data::Dump qw(dump);
-say dump @unambiguous;
+
+use constant EPSILON => 1;
+foreach (@unambiguous) {
+    my ($dracos, $osm) = @$_;
+    my $distance = OSM::distance delete($dracos->{lat}), delete($dracos->{lon}),
+                                 delete($osm->{lat}), delete($osm->{lon});
+    my ($housenumber, $street, $postcode);
+    my $loc1 = delete($dracos->{loc1});
+    if ($loc1 =~ /\A(\d+) (.+) ([A-Z]+\d+)\z/) {
+	($housenumber, $street, $postcode) = ($1, $2, $3);
+    }
+    elsif ($loc1 =~ /\A(\d+) (.+)\z/) {
+	($housenumber, $street) = ($1, $2);
+    }
+    else {
+	$street = $loc1;
+    }
+
+    # loc2, if present, gives the intersection street.  We don't do
+    # anything with this yet, since addr:street holds just the main one.
+    #
+    delete $dracos->{loc2};
+
+    $dracos->{postal_code} = delete $dracos->{postcode};
+    delete($osm->{amenity}) eq 'post_box' or die;
+    my $id = delete $osm->{id};
+
+    if ($dracos->{postal_code} =~ /\A$postcode_prefix \d\z/) {
+        # Dracos data gives partial postcode only.
+        my $dracos_postcode = $dracos->{postal_code};
+	my $osm_postcode = $osm->{postal_code};
+	if (defined $osm_postcode) {
+	    if ($osm_postcode =~ /\A${dracos_postcode}\d+\z/) {
+		# The OSM one is more detailed.  Do not warn.
+		delete $dracos->{postal_code};
+	    }
+	    elsif ($dracos_postcode =~ /\A$osm_postcode/) {
+		# The Dracos one is more detailed, or equal.  Handle as normal.
+	    }
+	    else {
+		say qq{$id: postal_code $osm_postcode is inconsistent with Dracos $dracos_postcode};
+		delete $dracos->{postal_code};
+	    }
+	}
+    }
+
+    foreach (sort keys %$dracos) {
+        my $d = $dracos->{$_};
+        my $o = $osm->{$_};
+        if (not defined $o) {
+	    say qq{$id: add $_="$d"};
+	}
+	elsif ($d ne $o) {
+	    say qq{$id: change $_="$o" to $_="$d"};
+	}
+    }
+}
