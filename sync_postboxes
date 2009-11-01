@@ -56,7 +56,7 @@ $min_lon -= $padding_lon;
 $max_lon += $padding_lon;
 
 # Sanity check we're not getting too much.
-my $MAX_FETCH_SIZE = 20_000;
+my $MAX_FETCH_SIZE = 30_000;
 my $corner_distance = int OSM::distance $min_lat, $min_lon, $max_lat, $max_lon;
 die "too large an area to fetch: $corner_distance metres corner to corner\n"
     if $corner_distance > $MAX_FETCH_SIZE;
@@ -128,6 +128,11 @@ foreach (@unambiguous) {
     else {
 	$street = $loc1;
     }
+    $dracos->{'addr:housenumber'} = $housenumber if defined $housenumber;
+    $dracos->{'addr:street'} = $street if defined $housenumber;
+    if (defined $postcode and $dracos->{postcode} !~ /\A$postcode /) {
+	say "inconsistency in Dracos data: box with $dracos->{postcode} has $postcode in loc1";
+    }
 
     # loc2, if present, gives the intersection street.  We don't do
     # anything with this yet, since addr:street holds just the main one.
@@ -138,22 +143,21 @@ foreach (@unambiguous) {
     delete($osm->{amenity}) eq 'post_box' or die;
     my $id = delete $osm->{id};
 
-    if ($dracos->{postal_code} =~ /\A$postcode_prefix \d\z/) {
-        # Dracos data gives partial postcode only.
-        my $dracos_postcode = $dracos->{postal_code};
-	my $osm_postcode = $osm->{postal_code};
-	if (defined $osm_postcode) {
-	    if ($osm_postcode =~ /\A${dracos_postcode}\d+\z/) {
-		# The OSM one is more detailed.  Do not warn.
-		delete $dracos->{postal_code};
-	    }
-	    elsif ($dracos_postcode =~ /\A$osm_postcode/) {
-		# The Dracos one is more detailed, or equal.  Handle as normal.
-	    }
-	    else {
-		say qq{$id: postal_code $osm_postcode is inconsistent with Dracos $dracos_postcode};
-		delete $dracos->{postal_code};
-	    }
+    # Check postal code.
+    my $dracos_postcode = delete $dracos->{postal_code};
+    my $osm_postcode = delete $osm->{postal_code};
+    if (defined $dracos_postcode and defined $osm_postcode) {
+	if ($dracos_postcode eq $osm_postcode) {
+	    # OK.
+	}
+	elsif ($osm_postcode =~ /\A${dracos_postcode}\d+\z/) {
+	    # The OSM one is more detailed.  Do not warn.
+	}
+	elsif ($dracos_postcode =~ /\A$osm_postcode/) {
+	    say qq{$id: change postal_code="$osm_postcode" to postal_code="$dracos_postcode" (more detailed)};
+	}
+	else {
+	    say qq{$id: postal_code $osm_postcode is inconsistent with Dracos $dracos_postcode};
 	}
     }
 
@@ -164,7 +168,7 @@ foreach (@unambiguous) {
 	    say qq{$id: add $_="$d"};
 	}
 	elsif ($d ne $o) {
-	    say qq{$id: change $_="$o" to $_="$d"};
+	    say qq{$id: discrepancy: Dracos $_="$d" vs OSM $_="$o"};
 	}
     }
 }
