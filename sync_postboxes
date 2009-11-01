@@ -114,11 +114,12 @@ foreach my $d (keys %closest_osm_to_dracos) {
 
 use constant EPSILON => 1;
 foreach (@unambiguous) {
-    my ($dracos, $osm) = @$_;
-    my $distance = OSM::distance delete($dracos->{lat}), delete($dracos->{lon}),
-                                 delete($osm->{lat}), delete($osm->{lon});
+    my %dracos = %{$_->[0]};
+    my %osm = %{$_->[1]};
+    my $distance = OSM::distance delete($dracos{lat}), delete($dracos{lon}),
+                                 delete($osm{lat}), delete($osm{lon});
     my ($housenumber, $street, $postcode);
-    my $loc1 = delete($dracos->{loc1});
+    my $loc1 = delete($dracos{loc1});
     if ($loc1 =~ /\A(\d+) (.+) ([A-Z]+\d+)\z/) {
 	($housenumber, $street, $postcode) = ($1, $2, $3);
     }
@@ -128,24 +129,24 @@ foreach (@unambiguous) {
     else {
 	$street = $loc1;
     }
-    $dracos->{'addr:housenumber'} = $housenumber if defined $housenumber;
-    $dracos->{'addr:street'} = $street if defined $housenumber;
-    if (defined $postcode and $dracos->{postcode} !~ /\A$postcode /) {
-	say "inconsistency in Dracos data: box with $dracos->{postcode} has $postcode in loc1";
+    $dracos{'addr:housenumber'} = $housenumber if defined $housenumber;
+    $dracos{'addr:street'} = $street if defined $housenumber;
+    if (defined $postcode and $dracos{postcode} !~ /\A$postcode /) {
+	say "inconsistency in Dracos data: box with $dracos{postcode} has $postcode in loc1";
     }
 
     # loc2, if present, gives the intersection street.  We don't do
     # anything with this yet, since addr:street holds just the main one.
     #
-    delete $dracos->{loc2};
+    delete $dracos{loc2};
 
-    $dracos->{postal_code} = delete $dracos->{postcode};
-    delete($osm->{amenity}) eq 'post_box' or die;
-    my $id = delete $osm->{id};
+    $dracos{postal_code} = delete $dracos{postcode};
+    delete($osm{amenity}) eq 'post_box' or die;
+    my $id = delete $osm{id};
 
     # Check postal code.
-    my $dracos_postcode = delete $dracos->{postal_code};
-    my $osm_postcode = delete $osm->{postal_code};
+    my $dracos_postcode = delete $dracos{postal_code};
+    my $osm_postcode = delete $osm{postal_code};
     if (defined $dracos_postcode and defined $osm_postcode) {
 	if ($dracos_postcode eq $osm_postcode) {
 	    # OK.
@@ -161,9 +162,9 @@ foreach (@unambiguous) {
 	}
     }
 
-    foreach (sort keys %$dracos) {
-        my $d = $dracos->{$_};
-        my $o = $osm->{$_};
+    foreach (sort keys %dracos) {
+        my $d = $dracos{$_};
+        my $o = $osm{$_};
         if (not defined $o) {
 	    say qq{$id: add $_="$d"};
 	}
@@ -172,3 +173,51 @@ foreach (@unambiguous) {
 	}
     }
 }
+
+my %has_unambiguous;
+foreach (@unambiguous) {
+    foreach (@$_) {
+	$has_unambiguous{$_}++ && die;
+    }
+}
+
+my @unmatched_osm = grep { not $has_unambiguous{$_} } @osm_postbox_nodes;
+my %suggested;
+foreach (@postbox_data) {
+    next if $has_unambiguous{$_};
+    my $lat = $_->{lat};
+    my $lon = $_->{lon};
+    printf(qq{to add at (%.6f, %.6f) (%s), ref="%s"\n},
+	   $lat, $lon, $_->{loc1}, $_->{ref});
+
+    # Find nearby unmatched OSM nodes.
+    my @osm_with_distance
+	= map { [ $_, OSM::distance $lat, $lon, $_->{lat}, $_->{lon} ] }
+    @unmatched_osm;
+    @osm_with_distance = grep { $_->[1] <= $MAX_DISTANCE } @osm_with_distance;
+    @osm_with_distance
+	= reverse sort { $a->[1] <=> $b->[1] } @osm_with_distance;
+
+    if (@osm_with_distance) {
+	say '  nearby OSM postboxes:';
+	foreach (@osm_with_distance) {
+	    my ($n, $distance) = @$_;
+	    $distance = int $distance;
+	    say "  $n->{id}: ($n->{lat}, $n->{lon})";
+	    $suggested{$n} = 1;
+	}
+    }
+}
+
+# Don't warn about every OSM box in that rectangle, just those that
+# have the ref asked for.  (TODO find a convex hull or something.)
+#
+foreach (@osm_postbox_nodes) {
+    next if $has_unambiguous{$_};
+    next if $suggested{$_};
+    my $ref = $_->{ref};
+    next if not defined $ref;
+    next unless $ref =~ /\A$postcode_prefix /o;
+    say "$_->{id}: not in Dracos data";
+}
+
