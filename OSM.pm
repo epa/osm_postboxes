@@ -4,14 +4,20 @@ use Carp qw(croak);
 use Math::Trig;
 use LWP::Simple;
 use XML::Twig;
+use File::Slurp;
 my $BASE_URI = 'http://api.openstreetmap.org/api/0.6/';
+our $Cache = 1;
 
 sub get_area_bbox {
     my ($left, $bottom, $right, $top) = @_;
     croak 'bad bbox: left > right' if $left > $right;
     croak 'bad bbox: bottom > top' if $bottom >= $top;
-    my $uri = $BASE_URI . "map?bbox=$left,$bottom,$right,$top";
+    my $bbox = "$left,$bottom,$right,$top";
+    my $uri = $BASE_URI . "map?bbox=$bbox";
+    my $cache = "cache.$bbox";
+    return read_file $cache if $Cache and -e $cache;
     my $got = get($uri) //  die "could not get $uri";
+    write_file $cache, $got if $Cache;
     return $got;
 }
 
