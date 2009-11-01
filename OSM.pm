@@ -74,12 +74,9 @@ sub get_area_centre {
 	$centre_lat + ($lat_degrees_high / 2);
 }
 
-sub get_area_zoom {
-    my ($centre_lat, $centre_lon, $zoom, $screen_width, $screen_height) = @_;
-    $screen_width //= 1000;
-    $screen_height //= 1000;
-
-    my %metres_per_pixel_at_equator = (
+use constant DEFAULT_SCREEN_WIDTH => 1000;
+use constant DEFAULT_SCREEN_HEIGHT => 1000;
+my %metres_per_pixel_at_equator = (
 	18 => 0.597164,
 	17 => 1.194329,
 	16 => 2.388657,
@@ -97,7 +94,12 @@ sub get_area_zoom {
 	4 => 9783.939621,
 	3 => 19567.879241,
 	2 => 39135.758482,
-    );
+);
+
+sub get_area_zoom {
+    my ($centre_lat, $centre_lon, $zoom, $screen_width, $screen_height) = @_;
+    $screen_width //= DEFAULT_SCREEN_WIDTH;
+    $screen_height //= DEFAULT_SCREEN_HEIGHT;
     die "bad zoom $zoom" if not exists $metres_per_pixel_at_equator{$zoom};
     my $cosine = cos(deg2rad($centre_lat));
     my $metres_per_pixel
@@ -105,6 +107,31 @@ sub get_area_zoom {
     my $metres_wide = $screen_width * $metres_per_pixel;
     my $metres_high = $screen_height * $metres_per_pixel;
     return get_area_centre $centre_lat, $centre_lon, $metres_wide, $metres_high;
+}
+
+sub bbox_to_zoom {
+    my ($left, $bottom, $right, $top, $screen_width, $screen_height) = @_;
+    $screen_width //= DEFAULT_SCREEN_WIDTH;
+    $screen_height //= DEFAULT_SCREEN_HEIGHT;
+
+    # Find the width and height of the area in metres.
+    my $centre_lat = ($bottom + $top) / 2;
+    my $centre_lon = ($left + $right) / 2;
+    my $width = ($right - $left) * one_degree_lon($centre_lat, $centre_lon);
+    my $height = ($top - $bottom) * one_degree_lat($centre_lat, $centre_lon);
+
+    # Pick the highest zoom level that covers the whole area.
+    my $cosine = cos(deg2rad($centre_lat));
+    foreach my $zoom (reverse sort { $a <=> $b }
+		      keys %metres_per_pixel_at_equator) {
+	my $m = $metres_per_pixel_at_equator{$zoom};
+	my $metres_per_pixel = $m / $cosine;
+	if ($screen_width * $metres_per_pixel >= $width
+	    and $screen_height * $metres_per_pixel >= $height) {
+	    return ($centre_lat, $centre_lon, $zoom);
+	}
+    }
+    die 'no zoom area big enough';
 }
 
 # Simplistic interface to parse the XML data and return the nodes.
