@@ -16,16 +16,17 @@ my $postcode_prefix = shift;
 $postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
     or die "bad postcode prefix $postcode_prefix\n";
 
-my @got;
+my @postbox_data;
 foreach (read_file $postboxes_data_file) {
-    my ($ref, $postcode, $loc1, $loc2, $lat, $lon) = split /\t/;
-    next unless $ref =~ /\A$postcode_prefix\s/o;
-    die unless $postcode =~ /\A$postcode_prefix\s/o;
-    push @got, [ $ref, $postcode, $lat, $lon, $loc1, $loc2 ];
-    say "adding pobox at $lat $lon";
+    my %h;
+    @h{qw(ref postcode loc1 loc2 lat lon)} = split /\t/;
+    next unless $h{ref} =~ /\A$postcode_prefix\s/o;
+    die unless $h{postcode} =~ /\A$postcode_prefix\s/o;
+    push @postbox_data, \%h;
+    say "adding pobox at $h{lat} $h{lon}";
 }
-my @lats = map { $_->[2] } @got;
-my @lons = map { $_->[3] } @got;
+my @lats = map { $_->{lat} } @postbox_data;
+my @lons = map { $_->{lon} } @postbox_data;
 my $min_lat = min @lats;
 my $max_lat = max @lats;
 my $min_lon = min @lons;
@@ -35,9 +36,11 @@ say "unpadded bbox: $min_lon $min_lat $max_lon $max_lat";
 my $centre_lat = ($min_lat + $max_lat) / 2;
 my $centre_lon = ($min_lon + $max_lon) / 2;
 
-my $padding = 100;
-my $padding_lat = OSM::height_to_lat_degrees $centre_lat, $centre_lon, $padding;
-my $padding_lon = OSM::width_to_lon_degrees $centre_lat, $centre_lon, $padding;
+my $MAX_DISTANCE = 100;
+my $padding_lat
+    = OSM::height_to_lat_degrees $centre_lat, $centre_lon, $MAX_DISTANCE;
+my $padding_lon
+    = OSM::width_to_lon_degrees $centre_lat, $centre_lon, $MAX_DISTANCE;
 
 $min_lat -= $padding_lat;
 $max_lat += $padding_lat;
@@ -50,9 +53,7 @@ my $data = OSM::get_area_bbox $min_lon, $min_lat, $max_lon, $max_lat;
 
 say 'parsing';
 my @nodes = OSM::parse_nodes $data;
-my @postboxes
+my @osm_postbox_nodes
     = grep { exists $_->{amenity} and $_->{amenity} eq 'post_box' } @nodes;
 use Data::Dump qw(dump);
-say dump @postboxes;
-
-
+say dump @osm_postbox_nodes;
