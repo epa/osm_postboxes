@@ -23,7 +23,8 @@ foreach (read_file $postboxes_data_file) {
     my %h;
     @h{qw(ref postcode loc1 loc2 lat lon)} = split /\t/;
     next unless $h{ref} =~ /\A$postcode_prefix\s/o;
-    die unless $h{postcode} =~ /\A$postcode_prefix\s/o;
+    die "postcode $h{postcode} does not match ref $h{ref}"
+	unless $h{postcode} =~ /\A$postcode_prefix/o;
     foreach (keys %h) {
 	delete $h{$_} if $h{$_} !~ /\S/;
     }
