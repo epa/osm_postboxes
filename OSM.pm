@@ -3,6 +3,7 @@ use Modern::Perl;
 use Carp qw(croak);
 use Math::Trig;
 use LWP::Simple;
+use XML::Twig;
 my $BASE_URI = 'http://api.openstreetmap.org/api/0.6/';
 
 sub get_area_bbox {
@@ -76,6 +77,47 @@ sub get_area_zoom {
     my $metres_wide = $screen_width * $metres_per_pixel;
     my $metres_high = $screen_height * $metres_per_pixel;
     return get_area_centre $centre_lat, $centre_lon, $metres_wide, $metres_high;
+}
+
+# Simplistic interface to parse the XML data and return the nodes.
+# Each one is returned as a hashref with id, lat, lon, and tags.
+# If a given tag appears twice then the values are concatenated with ;.
+# If for some reason 'id', 'lat' or 'lon' appear as tags they are ignored.
+# Certain tags such as 'created_by' are ignored.
+#
+my @boring_tags = qw(created_by randomjunk_bot ele time);
+my @wanted_attrs = qw(id lat lon);
+sub parse_nodes {
+    my $data = shift;
+    my $t = new XML::Twig;
+    $t->parse($data);
+    my @nodes = $t->root->children('node');
+    my @r;
+    foreach my $node (@nodes) {
+	my %h;
+
+	# First get the tags.
+	foreach ($node->children('tag')) {
+	    my $k = $_->att('k') // die "no 'k' in tag";
+	    next if @boring_tags ~~ $k;
+	    my $v = $_->att('v') // die "no 'v' in tag";
+	    if (exists $h{$k}) {
+		$h{$k} .= "; $v";
+	    }
+	    else {
+		$h{$k} = $v;
+	    }
+	}
+	next if not %h; # no tags
+
+	# Then the standard attributes.
+	foreach my $a (@wanted_attrs) {
+	    my $v = $node->att($a) // die "no $a attr in node";
+	    $h{$a} = $v;
+	}
+	push @r, \%h;
+    }
+    return @r;
 }
 
 1;
