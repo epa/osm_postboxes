@@ -28,39 +28,47 @@ foreach (read_file $postboxes_data_file) {
 	delete $h{$_} if $h{$_} !~ /\S/;
     }
     push @postbox_data, \%h;
-    say "adding pobox at $h{lat} $h{lon}";
 }
+say scalar(@postbox_data),
+    " post boxes found in $postboxes_data_file for $postcode_prefix";
+die if not @postbox_data;
+
 my @lats = map { $_->{lat} } @postbox_data;
 my @lons = map { $_->{lon} } @postbox_data;
 my $min_lat = min @lats;
 my $max_lat = max @lats;
 my $min_lon = min @lons;
 my $max_lon = max @lons;
-say "unpadded bbox: $min_lon $min_lat $max_lon $max_lat";
 
+# Maximum distance for matching two postbox positions.
+my $MAX_DISTANCE = 100;
+
+# Pad the bounding box to find postboxes near the positions given.
 my $centre_lat = ($min_lat + $max_lat) / 2;
 my $centre_lon = ($min_lon + $max_lon) / 2;
-
-my $MAX_DISTANCE = 100;
 my $padding_lat
     = OSM::height_to_lat_degrees $centre_lat, $centre_lon, $MAX_DISTANCE;
 my $padding_lon
     = OSM::width_to_lon_degrees $centre_lat, $centre_lon, $MAX_DISTANCE;
-
 $min_lat -= $padding_lat;
 $max_lat += $padding_lat;
 $min_lon -= $padding_lon;
 $max_lon += $padding_lon;
-say "padded bbox: $min_lon $min_lat $max_lon $max_lat";
 
-say 'fetching';
+# Sanity check we're not getting too much.
+my $MAX_FETCH_SIZE = 20_000;
+my $corner_distance = int OSM::distance $min_lat, $min_lon, $max_lat, $max_lon;
+die "too large an area to fetch: $corner_distance metres corner to corner\n"
+    if $corner_distance > $MAX_FETCH_SIZE;
+say "fetching area $corner_distance metres from corner to corner";
+
 my $data = OSM::get_area_bbox $min_lon, $min_lat, $max_lon, $max_lat;
 
 say 'parsing';
 my @nodes = OSM::parse_nodes $data;
 my @osm_postbox_nodes
     = grep { exists $_->{amenity} and $_->{amenity} eq 'post_box' } @nodes;
-use Data::Dump qw(dump);
+say scalar(@osm_postbox_nodes), ' nearby post boxes found in OSM';
 
 # Given one data point, find the closest to it in a list of others,
 # subject to $MAX_DISTANCE.
