@@ -45,5 +45,14 @@ $min_lon -= $padding_lon;
 $max_lon += $padding_lon;
 say "padded bbox: $min_lon $min_lat $max_lon $max_lat";
 
+say 'fetching';
 my $data = OSM::get_area_bbox $min_lon, $min_lat, $max_lon, $max_lat;
-say $data;
+
+say 'parsing';
+my @nodes = OSM::parse_nodes $data;
+my @postboxes
+    = grep { exists $_->{amenity} and $_->{amenity} eq 'post_box' } @nodes;
+use Data::Dump qw(dump);
+say dump @postboxes;
+
+
