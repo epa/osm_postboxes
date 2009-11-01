@@ -15,21 +15,31 @@ sub get_area_bbox {
     return $got;
 }
 
+# Given a position return the size in metres of one degree of
+# longitude / latitude centred at that position.
+#
+sub one_degree_lat {
+    my ($lat, $lon) = @_;
+    return 111_000;
+}
+sub one_degree_lon {
+    my ($lat, $lon) = @_;
+    my $cosine = cos(deg2rad($lat));
+    my $one_degree_lon_at_equator = 111_000;
+    return $one_degree_lon_at_equator * $cosine;
+}
+
 # Utility functions to convert width and height to degrees of
 # longitude and latitude respectively.  Pass the the lat,lon of the
 # position you're interested in.
 #
 sub width_to_lon_degrees {
     my ($lat, $lon, $width) = @_;
-    my $cosine = cos(deg2rad($lat));
-    my $one_degree_lon_at_equator = 111_000;
-    my $one_degree_lon = $one_degree_lon_at_equator * $cosine;
-    return $width / $one_degree_lon;
+    return $width / one_degree_lon($lat, $lon);
 }
 sub height_to_lat_degrees {
     my ($lat, $lon, $width) = @_;
-    my $one_degree_lat = 111_000;
-    return $width / $one_degree_lat;
+    return $width / one_degree_lat($lat, $lon);
 }
 
 sub get_area_centre {
