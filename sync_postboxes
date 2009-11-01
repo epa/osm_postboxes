@@ -2,6 +2,8 @@
 use Modern::Perl;
 use File::Slurp;
 use List::Util qw(min max);
+use List::MoreUtils qw(uniq);
+use Tie::RefHash;
 use lib '.';
 use OSM;
 
@@ -56,4 +58,47 @@ my @nodes = OSM::parse_nodes $data;
 my @osm_postbox_nodes
     = grep { exists $_->{amenity} and $_->{amenity} eq 'post_box' } @nodes;
 use Data::Dump qw(dump);
-say dump @osm_postbox_nodes;
+
+# Given one data point, find the closest to it in a list of others,
+# subject to $MAX_DISTANCE.
+#
+sub find_closest {
+    my ($box, @others) = @_;
+    my $lat = $box->{lat};
+    my $lon = $box->{lon};
+    my ($closest, $closest_distance);
+    foreach my $n (@others) {
+	my ($nlat, $nlon) = ($n->{lat}, $n->{lon});
+	my $distance = OSM::distance $lat, $lon, $nlat, $nlon;
+	next if $distance > $MAX_DISTANCE;
+	if (not defined $closest_distance or $distance < $closest_distance) {
+	    $closest = $n;
+	    $closest_distance = $distance;
+	}
+    }
+    return $closest;
+}
+
+# Find unambiguous is-closest-to matches.
+my %closest_osm_to_dracos;
+tie %closest_osm_to_dracos, 'Tie::RefHash' or die;
+foreach (@postbox_data) {
+    my $closest = find_closest $_, @osm_postbox_nodes;
+    $closest_osm_to_dracos{$_} = $closest if $closest;
+}
+my %closest_dracos_to_osm;
+tie %closest_dracos_to_osm, 'Tie::RefHash' or die;
+foreach (@osm_postbox_nodes) {
+    my $closest = find_closest $_, @postbox_data;
+    $closest_dracos_to_osm{$_} = $closest if $closest;
+}
+my @unambiguous;
+foreach my $d (keys %closest_osm_to_dracos) {
+    my $o = $closest_osm_to_dracos{$d};
+    my $got = $closest_dracos_to_osm{$o};
+    if (defined $got and $got eq $d) {
+	push @unambiguous, [ $d, $o ];
+    }
+}
+use Data::Dump qw(dump);
+say dump @unambiguous;
