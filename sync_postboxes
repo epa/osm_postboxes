@@ -223,7 +223,7 @@ foreach (@postbox_data) {
 	foreach (@osm_with_distance) {
 	    my ($n, $distance) = @$_;
 	    $distance = int $distance;
-	    say "  $n->{id}: ($n->{lat}, $n->{lon})";
+	    say "  $n->{id}: $distance metres away ($n->{lat}, $n->{lon})";
 	    $suggested{$n} = 1;
 	}
     }
