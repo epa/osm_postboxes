@@ -170,6 +170,18 @@ foreach (@unambiguous) {
 	}
     }
 
+    # Check 'ref' - sometimes on the map two are given.
+    if (defined $dracos{ref} and defined $osm{ref} and $osm{ref} =~ tr/;//) {
+	my $d = delete $dracos{ref};
+	my @o = split /;\s*/, delete $osm{ref};
+	if (@o ~~ $d) {
+	    # OK, this ref is there, plus some others.
+	}
+	else {
+	    say qq{$id: refs (@o) are inconsistent with Dracos $d};
+	}
+    }
+
     foreach (sort keys %dracos) {
         my $d = $dracos{$_};
         my $o = $osm{$_};
