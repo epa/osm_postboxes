@@ -66,8 +66,8 @@ say "fetching area $corner_distance metres from corner to corner";
 {
     my ($got_centre_lat, $got_centre_lon, $zoom)
 	= OSM::bbox_to_zoom($min_lon, $min_lat, $max_lon, $max_lat);
-    say '<http://www.openstreetmap.org/'
-	. "?lat=$got_centre_lat&lon=$got_centre_lon&zoom=$zoom>";
+    printf "<http://www.openstreetmap.org/?lat=%.6f&lon=%.6f&zoom=%d>\n",
+    $got_centre_lat, $got_centre_lon, $zoom;
 }
 
 my $data = OSM::get_area_bbox $min_lon, $min_lat, $max_lon, $max_lat;
