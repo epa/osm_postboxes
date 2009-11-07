@@ -202,7 +202,6 @@ foreach (@unambiguous) {
     }
 }
 
-my @unmatched_osm = grep { not $has_unambiguous{$_} } @osm_postbox_nodes;
 my %suggested;
 foreach (@postbox_data) {
     next if $has_unambiguous{$_};
@@ -214,7 +213,7 @@ foreach (@postbox_data) {
     # Find nearby unmatched OSM nodes.
     my @osm_with_distance
 	= map { [ $_, OSM::distance $lat, $lon, $_->{lat}, $_->{lon} ] }
-    @unmatched_osm;
+    @osm_postbox_nodes;
     @osm_with_distance = grep { $_->[1] <= $MAX_DISTANCE } @osm_with_distance;
     @osm_with_distance
 	= reverse sort { $a->[1] <=> $b->[1] } @osm_with_distance;
@@ -224,7 +223,9 @@ foreach (@postbox_data) {
 	foreach (@osm_with_distance) {
 	    my ($n, $distance) = @$_;
 	    $distance = int $distance;
-	    say "  $n->{id} $n->{version}: $distance metres away ($n->{lat}, $n->{lon})";
+	    print "  $n->{id} $n->{version}: $distance metres away ($n->{lat}, $n->{lon})";
+            print ' (already matched)' if $has_unambiguous{$_};
+            print "\n";
 	    $suggested{$n} = 1;
 	}
     }
