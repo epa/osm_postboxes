@@ -151,6 +151,7 @@ foreach (@unambiguous) {
     $dracos{postal_code} = delete $dracos{postcode};
     delete($osm{amenity}) eq 'post_box' or die;
     my $id = delete $osm{id};
+    my $version = delete $osm{version};
 
     # Check postal code.
     my $dracos_postcode = delete $dracos{postal_code};
@@ -163,10 +164,10 @@ foreach (@unambiguous) {
 	    # The OSM one is more detailed.  Do not warn.
 	}
 	elsif ($dracos_postcode =~ /\A$osm_postcode/) {
-	    say qq{$id: change postal_code="$osm_postcode" to postal_code="$dracos_postcode" (more detailed)};
+	    say qq{$id $version: change postal_code="$osm_postcode" to postal_code="$dracos_postcode" (more detailed)};
 	}
 	else {
-	    say qq{$id: postal_code $osm_postcode is inconsistent with Dracos $dracos_postcode};
+	    say qq{$id $version: postal_code $osm_postcode is inconsistent with Dracos $dracos_postcode};
 	}
     }
 
@@ -178,7 +179,7 @@ foreach (@unambiguous) {
 	    # OK, this ref is there, plus some others.
 	}
 	else {
-	    say qq{$id: refs (@o) are inconsistent with Dracos $d};
+	    say qq{$id $version: refs (@o) are inconsistent with Dracos $d};
 	}
     }
 
@@ -186,10 +187,10 @@ foreach (@unambiguous) {
         my $d = $dracos{$_};
         my $o = $osm{$_};
         if (not defined $o) {
-	    say qq{$id: add $_="$d"};
+	    say qq{$id $version: add $_="$d"};
 	}
 	elsif ($d ne $o) {
-	    say qq{$id: discrepancy: Dracos $_="$d" vs OSM $_="$o"};
+	    say qq{$id $version: discrepancy: Dracos $_="$d" vs OSM $_="$o"};
 	}
     }
 }
@@ -223,7 +224,7 @@ foreach (@postbox_data) {
 	foreach (@osm_with_distance) {
 	    my ($n, $distance) = @$_;
 	    $distance = int $distance;
-	    say "  $n->{id}: $distance metres away ($n->{lat}, $n->{lon})";
+	    say "  $n->{id} $n->{version}: $distance metres away ($n->{lat}, $n->{lon})";
 	    $suggested{$n} = 1;
 	}
     }

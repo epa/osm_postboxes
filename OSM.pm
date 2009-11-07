@@ -141,7 +141,7 @@ sub bbox_to_zoom {
 # Certain tags such as 'created_by' are ignored.
 #
 my @boring_tags = qw(created_by randomjunk_bot ele time);
-my @wanted_attrs = qw(id lat lon);
+my @wanted_attrs = qw(id version lat lon);
 sub parse_nodes {
     my $data = shift;
     my $t = new XML::Twig;
