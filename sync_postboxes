@@ -296,12 +296,12 @@ sub write_node {
 my $gunk = 'version="0.3" generator="sync_postboxes"';
 exit if not @attr_changes and not @new_nodes;
 say "<osmChange $gunk>";
-foreach (@attr_changes) {
+foreach (sort { $a->{id} <=> $b->{id} } @attr_changes) {
     say "  <modify $gunk>";
     write_node $_;
     say '  </modify>';
 }
-foreach (@new_nodes) {
+foreach (reverse sort { $a->{id} <=> $b->{id} } @new_nodes) {
     say "  <create $gunk>";
     write_node $_;
     say '  </create>';
