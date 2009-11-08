@@ -138,9 +138,9 @@ sub bbox_to_zoom {
 # Each one is returned as a hashref with id, lat, lon, and tags.
 # If a given tag appears twice then the values are concatenated with ;.
 # If for some reason 'id', 'lat' or 'lon' appear as tags they are ignored.
-# Certain tags such as 'created_by' are ignored.
+# Set @Boring_tags if you want to ignore other tags.
 #
-my @boring_tags = qw(created_by randomjunk_bot ele time);
+our @Boring_tags;
 my @wanted_attrs = qw(id version lat lon);
 sub parse_nodes {
     my $data = shift;
@@ -154,7 +154,7 @@ sub parse_nodes {
 	# First get the tags.
 	foreach ($node->children('tag')) {
 	    my $k = $_->att('k') // die "no 'k' in tag";
-	    next if @boring_tags ~~ $k;
+	    next if @Boring_tags ~~ $k;
 	    my $v = $_->att('v') // die "no 'v' in tag";
 	    if (exists $h{$k}) {
 		$h{$k} .= "; $v";
