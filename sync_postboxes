@@ -53,7 +53,13 @@ foreach (@postbox_data) {
     $_->{'addr:housenumber'} = $housenumber if defined $housenumber;
     $_->{'addr:street'} = $street if defined $housenumber;
     if (defined $postcode and $_->{postcode} !~ /\A$postcode /) {
-	warn "inconsistency in Dracos data: box with $_->{postcode} has $postcode in loc1\n";
+	if ($_->{postcode} =~ /\A${postcode}(\d)\z/) {
+	    # A simple missing space, most likely.
+	    $_->{postcode} = "$postcode $1";
+	}
+	else {
+	    warn "inconsistency in Dracos data: box with $_->{postcode} has $postcode in loc1\n";
+	}
     }
 
     # loc2, if present, gives the intersection street.  We don't do
