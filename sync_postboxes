@@ -203,7 +203,10 @@ foreach (@unambiguous) {
 	}
     }
 
-    push @attr_changes, \%osm_new if $changed;
+    if ($changed) {
+	$osm_new{source} //= 'dracos';
+	push @attr_changes, \%osm_new;
+    }
 }
 
 my %has_unambiguous;
@@ -252,7 +255,8 @@ foreach (@postbox_data) {
 	my $node_id = -(scalar(@new_nodes) + 1);
 	push @new_nodes, { id => $node_id, lat => $lat, lon => $lon,
 			   'addr:street' => $loc1, ref => $ref,
-			   postal_code => $postcode, operator => $operator };
+			   postal_code => $postcode, operator => $operator,
+			   source => 'dracos', 'dracos:verified' => 'no' };
     }
 }
 
@@ -284,7 +288,7 @@ sub write_node {
 	= join ' ', map { $_ . '="' . delete($a{$_}) . '"' } sort keys %a;
     say "    <node $attr_str>";
     foreach (sort keys %h) {
-	say qq{      <tag k="$_" v="$h{$_}">};
+	say qq{      <tag k="$_" v="$h{$_}" />};
     }
     say '    </node>';
 }
