@@ -281,7 +281,6 @@ sub write_node {
     my %a;
     $a{$_} = delete $h{$_} foreach qw(id lat lon version);
     $a{version} //= 0;
-    ++$a{version};
     $a{timestamp} = $timestamp;
     $a{changeset} = $changeset;
     my $attr_str
