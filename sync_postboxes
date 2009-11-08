@@ -29,6 +29,7 @@ foreach (read_file $postboxes_data_file) {
     foreach (keys %h) {
 	delete $h{$_} if $h{$_} !~ /\S/;
     }
+    $h{operator} = 'Royal Mail'; # might as well assume this
     push @postbox_data, \%h;
 }
 warn scalar(@postbox_data),
@@ -221,6 +222,7 @@ foreach (@postbox_data) {
     my $loc1 = $_->{loc1};
     my $ref = $_->{ref};
     my $postcode = $_->{postcode};
+    my $operator = $_->{operator};
 
     # Find nearby unmatched OSM nodes.
     my @osm_with_distance
@@ -250,7 +252,7 @@ foreach (@postbox_data) {
 	my $node_id = -(scalar(@new_nodes) + 1);
 	push @new_nodes, { id => $node_id, lat => $lat, lon => $lon,
 			   'addr:street' => $loc1, ref => $ref,
-			   postal_code => $postcode };
+			   postal_code => $postcode, operator => $operator };
     }
 }
 
