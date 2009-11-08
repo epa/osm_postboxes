@@ -19,6 +19,7 @@ my $postcode_prefix = shift;
 $postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
     or die "bad postcode prefix $postcode_prefix\n";
 
+# Read the Dracos file.  The fields are the same as in the header.
 my @postbox_data;
 foreach (read_file $postboxes_data_file) {
     my %h;
@@ -29,12 +30,40 @@ foreach (read_file $postboxes_data_file) {
     foreach (keys %h) {
 	delete $h{$_} if $h{$_} !~ /\S/;
     }
-    $h{operator} = 'Royal Mail'; # might as well assume this
     push @postbox_data, \%h;
 }
 warn scalar(@postbox_data),
     " post boxes found in $postboxes_data_file for $postcode_prefix\n";
 die if not @postbox_data;
+
+# Process the Dracos entries breaking up the information a bit.
+foreach (@postbox_data) {
+    $_->{operator} = 'Royal Mail'; # might as well assume this
+    my ($housenumber, $street, $postcode);
+    my $loc1 = delete($_->{loc1});
+    if ($loc1 =~ /\A(\d+) (.+) ([A-Z]+\d+)\z/) {
+	($housenumber, $street, $postcode) = ($1, $2, $3);
+    }
+    elsif ($loc1 =~ /\A(\d+) (.+)\z/) {
+	($housenumber, $street) = ($1, $2);
+    }
+    else {
+	$street = $loc1;
+    }
+    $_->{'addr:housenumber'} = $housenumber if defined $housenumber;
+    $_->{'addr:street'} = $street if defined $housenumber;
+    if (defined $postcode and $_->{postcode} !~ /\A$postcode /) {
+	warn "inconsistency in Dracos data: box with $_->{postcode} has $postcode in loc1\n";
+    }
+
+    # loc2, if present, gives the intersection street.  We don't do
+    # anything with this yet, since addr:street holds just the main one.
+    #
+    delete $_->{loc2};
+
+    # Rename this to the standard OSM name.
+    $_->{postal_code} = delete $_->{postcode};
+}
 
 my @lats = map { $_->{lat} } @postbox_data;
 my @lons = map { $_->{lon} } @postbox_data;
@@ -133,49 +162,26 @@ foreach (@unambiguous) {
     my $changed = 0;
     my $distance = OSM::distance delete($dracos{lat}), delete($dracos{lon}),
                                  delete($osm{lat}), delete($osm{lon});
-    my ($housenumber, $street, $postcode);
-    my $loc1 = delete($dracos{loc1});
-    if ($loc1 =~ /\A(\d+) (.+) ([A-Z]+\d+)\z/) {
-	($housenumber, $street, $postcode) = ($1, $2, $3);
-    }
-    elsif ($loc1 =~ /\A(\d+) (.+)\z/) {
-	($housenumber, $street) = ($1, $2);
-    }
-    else {
-	$street = $loc1;
-    }
-    $dracos{'addr:housenumber'} = $housenumber if defined $housenumber;
-    $dracos{'addr:street'} = $street if defined $housenumber;
-    if (defined $postcode and $dracos{postcode} !~ /\A$postcode /) {
-	warn "inconsistency in Dracos data: box with $dracos{postcode} has $postcode in loc1\n";
-    }
-
-    # loc2, if present, gives the intersection street.  We don't do
-    # anything with this yet, since addr:street holds just the main one.
-    #
-    delete $dracos{loc2};
-
-    $dracos{postal_code} = delete $dracos{postcode};
     delete($osm{amenity}) eq 'post_box' or die;
     my $id = delete $osm{id};
     my $version = delete $osm{version};
 
     # Check postal code.
-    my $dracos_postcode = delete $dracos{postal_code};
-    my $osm_postcode = delete $osm{postal_code};
-    if (defined $dracos_postcode and defined $osm_postcode) {
-	if ($dracos_postcode eq $osm_postcode) {
+    my $dracos_postal_code = delete $dracos{postal_code};
+    my $osm_postal_code = delete $osm{postal_code};
+    if (defined $dracos_postal_code and defined $osm_postal_code) {
+	if ($dracos_postal_code eq $osm_postal_code) {
 	    # OK.
 	}
-	elsif ($osm_postcode =~ /\A${dracos_postcode}\d+\z/) {
+	elsif ($osm_postal_code =~ /\A${dracos_postal_code}\d+\z/) {
 	    # The OSM one is more detailed.  Do not warn.
 	}
-	elsif ($dracos_postcode =~ /\A$osm_postcode/) {
-	    $osm_new{postal_code} = $dracos_postcode;
+	elsif ($dracos_postal_code =~ /\A$osm_postal_code/) {
+	    $osm_new{postal_code} = $dracos_postal_code;
 	    $changed = 1;
 	}
 	else {
-	    warn qq{$id $version: postal_code $osm_postcode is inconsistent with Dracos $dracos_postcode\n};
+	    warn qq{$id $version: postal_code $osm_postal_code is inconsistent with Dracos $dracos_postal_code\n};
 	}
     }
 
@@ -218,14 +224,14 @@ foreach (@unambiguous) {
 
 my @new_nodes;
 my %suggested;
-foreach (@postbox_data) {
-    next if $has_unambiguous{$_};
-    my $lat = $_->{lat};
-    my $lon = $_->{lon};
-    my $loc1 = $_->{loc1};
-    my $ref = $_->{ref};
-    my $postcode = $_->{postcode};
-    my $operator = $_->{operator};
+foreach my $d (@postbox_data) {
+    next if $has_unambiguous{$d};
+    my $lat = $d->{lat};
+    my $lon = $d->{lon};
+    my $loc1 = $d->{loc1};
+    my $ref = $d->{ref};
+    my $postal_code = $d->{postal_code};
+    my $operator = $d->{operator};
 
     # Find nearby unmatched OSM nodes.
     my @osm_with_distance
@@ -236,16 +242,16 @@ foreach (@postbox_data) {
 	= reverse sort { $a->[1] <=> $b->[1] } @osm_with_distance;
 
     if (@osm_with_distance) {
-	 my $msg = sprintf
-	     'to add at (%.6f, %.6f) (%s), ref="%s", postal_code="%s"',
-	     $lat, $lon, $loc1, $ref, $postcode;
+	my $msg = sprintf
+	     'to add at (%.6f, %.6f), ref="%s", postal_code="%s"',
+	     $lat, $lon, $ref, $postal_code;
 	 warn "$msg\n";
 	 warn "...but has nearby OSM postboxes:\n";
 	foreach (@osm_with_distance) {
 	    my ($n, $distance) = @$_;
 	    $distance = int $distance;
 	    print STDERR "  $n->{id} $n->{version}: $distance metres away ($n->{lat}, $n->{lon})\n";
-            print STDERR ' (already matched)' if $has_unambiguous{$_};
+            print STDERR '   (already matched)' if $has_unambiguous{$n};
             print STDERR "\n";
 	    $suggested{$n} = 1;
 	}
@@ -253,11 +259,16 @@ foreach (@postbox_data) {
     else {
 	# Nothing nearby, we can safely add the new node.
 	my $node_id = -(scalar(@new_nodes) + 1);
-	push @new_nodes, { id => $node_id, lat => $lat, lon => $lon,
-			   amenity => 'post_box', ref => $ref, 
-			   postal_code => $postcode, operator => $operator,
-			   'addr:street' => $loc1,
-			   source => 'dracos', 'dracos:verified' => 'no' };
+	my %h = (
+	    id => $node_id, lat => $lat, lon => $lon,
+	    amenity => 'post_box', ref => $ref, 
+	    postal_code => $postal_code, operator => $operator,
+	    source => 'dracos', 'dracos:verified' => 'no',
+	    );
+	foreach ('addr:housenumber', 'addr:street') {
+	    $h{$_} = $d->{$_} if exists $d->{$_};
+	}
+	push @new_nodes, \%h;
     }
 }
 
