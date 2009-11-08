@@ -4,6 +4,7 @@ use File::Slurp;
 use List::Util qw(min max);
 use List::MoreUtils qw(uniq);
 use Tie::RefHash;
+use Date::Manip;
 use lib '.';
 use OSM;
 
@@ -30,8 +31,8 @@ foreach (read_file $postboxes_data_file) {
     }
     push @postbox_data, \%h;
 }
-say scalar(@postbox_data),
-    " post boxes found in $postboxes_data_file for $postcode_prefix";
+warn scalar(@postbox_data),
+    " post boxes found in $postboxes_data_file for $postcode_prefix\n";
 die if not @postbox_data;
 
 my @lats = map { $_->{lat} } @postbox_data;
@@ -61,22 +62,24 @@ my $MAX_FETCH_SIZE = 30_000;
 my $corner_distance = int OSM::distance $min_lat, $min_lon, $max_lat, $max_lon;
 die "too large an area to fetch: $corner_distance metres corner to corner\n"
     if $corner_distance > $MAX_FETCH_SIZE;
-say "fetching area $corner_distance metres from corner to corner";
+warn "fetching area $corner_distance metres from corner to corner\n";
 
 {
     my ($got_centre_lat, $got_centre_lon, $zoom)
 	= OSM::bbox_to_zoom($min_lon, $min_lat, $max_lon, $max_lat);
-    printf "<http://www.openstreetmap.org/?lat=%.6f&lon=%.6f&zoom=%d>\n",
-    $got_centre_lat, $got_centre_lon, $zoom;
+    my $uri
+	= sprintf 'http://www.openstreetmap.org/?lat=%.6f&lon=%.6f&zoom=%d',
+	$got_centre_lat, $got_centre_lon, $zoom;
+    warn "<$uri>\n";
 }
 
 my $data = OSM::get_area_bbox $min_lon, $min_lat, $max_lon, $max_lat;
 
-say 'parsing';
+warn "parsing\n";
 my @nodes = OSM::parse_nodes $data;
 my @osm_postbox_nodes
     = grep { exists $_->{amenity} and $_->{amenity} eq 'post_box' } @nodes;
-say scalar(@osm_postbox_nodes), ' nearby post boxes found in OSM';
+warn scalar(@osm_postbox_nodes) . " nearby post boxes found in OSM\n";
 
 # Given one data point, find the closest to it in a list of others,
 # subject to $MAX_DISTANCE.
@@ -120,10 +123,13 @@ foreach my $d (keys %closest_osm_to_dracos) {
     }
 }
 
+my @attr_changes;
 use constant EPSILON => 1;
 foreach (@unambiguous) {
     my %dracos = %{$_->[0]};
     my %osm = %{$_->[1]};
+    my %osm_new = %osm;
+    my $changed = 0;
     my $distance = OSM::distance delete($dracos{lat}), delete($dracos{lon}),
                                  delete($osm{lat}), delete($osm{lon});
     my ($housenumber, $street, $postcode);
@@ -140,7 +146,7 @@ foreach (@unambiguous) {
     $dracos{'addr:housenumber'} = $housenumber if defined $housenumber;
     $dracos{'addr:street'} = $street if defined $housenumber;
     if (defined $postcode and $dracos{postcode} !~ /\A$postcode /) {
-	say "inconsistency in Dracos data: box with $dracos{postcode} has $postcode in loc1";
+	warn "inconsistency in Dracos data: box with $dracos{postcode} has $postcode in loc1\n";
     }
 
     # loc2, if present, gives the intersection street.  We don't do
@@ -164,10 +170,11 @@ foreach (@unambiguous) {
 	    # The OSM one is more detailed.  Do not warn.
 	}
 	elsif ($dracos_postcode =~ /\A$osm_postcode/) {
-	    say qq{$id $version: change postal_code="$osm_postcode" to postal_code="$dracos_postcode" (more detailed)};
+	    $osm_new{postal_code} = $dracos_postcode;
+	    $changed = 1;
 	}
 	else {
-	    say qq{$id $version: postal_code $osm_postcode is inconsistent with Dracos $dracos_postcode};
+	    warn qq{$id $version: postal_code $osm_postcode is inconsistent with Dracos $dracos_postcode\n};
 	}
     }
 
@@ -179,7 +186,7 @@ foreach (@unambiguous) {
 	    # OK, this ref is there, plus some others.
 	}
 	else {
-	    say qq{$id $version: refs (@o) are inconsistent with Dracos $d};
+	    warn qq{$id $version: refs (@o) are inconsistent with Dracos $d\n};
 	}
     }
 
@@ -187,12 +194,15 @@ foreach (@unambiguous) {
         my $d = $dracos{$_};
         my $o = $osm{$_};
         if (not defined $o) {
-	    say qq{$id $version: add $_="$d"};
+	    $osm_new{$_} = $d;
+	    $changed = 1;
 	}
 	elsif ($d ne $o) {
-	    say qq{$id $version: discrepancy: Dracos $_="$d" vs OSM $_="$o"};
+	    warn qq{$id $version: discrepancy: Dracos $_="$d" vs OSM $_="$o"\n};
 	}
     }
+
+    push @attr_changes, \%osm_new if $changed;
 }
 
 my %has_unambiguous;
@@ -202,13 +212,15 @@ foreach (@unambiguous) {
     }
 }
 
+my @new_nodes;
 my %suggested;
 foreach (@postbox_data) {
     next if $has_unambiguous{$_};
     my $lat = $_->{lat};
     my $lon = $_->{lon};
-    printf(qq{to add at (%.6f, %.6f) (%s), ref="%s"\n},
-	   $lat, $lon, $_->{loc1}, $_->{ref});
+    my $loc1 = $_->{loc1};
+    my $ref = $_->{ref};
+    my $postcode = $_->{postcode};
 
     # Find nearby unmatched OSM nodes.
     my @osm_with_distance
@@ -219,15 +231,26 @@ foreach (@postbox_data) {
 	= reverse sort { $a->[1] <=> $b->[1] } @osm_with_distance;
 
     if (@osm_with_distance) {
-	say '  nearby OSM postboxes:';
+	 my $msg = sprintf
+	     'to add at (%.6f, %.6f) (%s), ref="%s", postal_code="%s"',
+	     $lat, $lon, $loc1, $ref, $postcode;
+	 warn "$msg\n";
+	 warn "...but has nearby OSM postboxes:\n";
 	foreach (@osm_with_distance) {
 	    my ($n, $distance) = @$_;
 	    $distance = int $distance;
-	    print "  $n->{id} $n->{version}: $distance metres away ($n->{lat}, $n->{lon})";
-            print ' (already matched)' if $has_unambiguous{$_};
-            print "\n";
+	    print STDERR "  $n->{id} $n->{version}: $distance metres away ($n->{lat}, $n->{lon})\n";
+            print STDERR ' (already matched)' if $has_unambiguous{$_};
+            print STDERR "\n";
 	    $suggested{$n} = 1;
 	}
+    }
+    else {
+	# Nothing nearby, we can safely add the new node.
+	my $node_id = -(scalar(@new_nodes) + 1);
+	push @new_nodes, { id => $node_id, lat => $lat, lon => $lon,
+			   'addr:street' => $loc1, ref => $ref,
+			   postal_code => $postcode };
     }
 }
 
@@ -240,6 +263,43 @@ foreach (@osm_postbox_nodes) {
     my $ref = $_->{ref};
     next if not defined $ref;
     next unless $ref =~ /\A$postcode_prefix /o;
-    say "$_->{id}: not in Dracos data";
+    warn "$_->{id}: not in Dracos data\n";
 }
 
+my $timestamp = UnixDate 'now', '%O'; # FIXME requires UTC time
+my $changeset = 999;
+sub write_node {
+    my %h = %{shift()};
+
+    # First get out the standard attrs.
+    my %a;
+    $a{$_} = delete $h{$_} foreach qw(id lat lon version);
+    $a{version} //= 0;
+    ++$a{version};
+    $a{timestamp} = $timestamp;
+    $a{changeset} = $changeset;
+    my $attr_str
+	= join ' ', map { $_ . '="' . delete($a{$_}) . '"' } sort keys %a;
+    say "    <node $attr_str>";
+    foreach (sort keys %h) {
+	say qq{      <tag k="$_" v="$h{$_}">};
+    }
+    say '    </node>';
+}
+
+my $gunk = 'version="0.3" generator="sync_postboxes"';
+exit if not @attr_changes and not @new_nodes;
+say "<osmChange $gunk>";
+foreach (@attr_changes) {
+    say "  <modify $gunk>";
+    write_node $_;
+    say '  </modify>';
+}
+foreach (@new_nodes) {
+    say "  <create $gunk>";
+    write_node $_;
+    say '  </create>';
+}
+say '</osmChange>';
+
+    
