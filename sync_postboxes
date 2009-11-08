@@ -254,8 +254,9 @@ foreach (@postbox_data) {
 	# Nothing nearby, we can safely add the new node.
 	my $node_id = -(scalar(@new_nodes) + 1);
 	push @new_nodes, { id => $node_id, lat => $lat, lon => $lon,
-			   'addr:street' => $loc1, ref => $ref,
+			   amenity => 'post_box', ref => $ref, 
 			   postal_code => $postcode, operator => $operator,
+			   'addr:street' => $loc1,
 			   source => 'dracos', 'dracos:verified' => 'no' };
     }
 }
