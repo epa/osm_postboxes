@@ -4,6 +4,7 @@ use File::Slurp;
 use List::Util qw(min max);
 use List::MoreUtils qw(uniq);
 use Tie::RefHash;
+use Getopt::Long;
 use Date::Manip;
 use lib '.';
 use OSM;
@@ -14,7 +15,9 @@ if (not -e $postboxes_data_file) {
     die "$postboxes_data_file not there, fetch it from:\n$uri\n";
 }
 
-die "usage: $0 postcode-prefix\ne.g. $0 E10\n" if @ARGV != 1;
+our $opt_cautious;
+(GetOptions('cautious') && @ARGV == 1)
+    or die "usage: $0 [--cautious] postcode-prefix\ne.g. $0 E10\n";
 my $postcode_prefix = shift;
 $postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
     or die "bad postcode prefix $postcode_prefix\n";
@@ -30,6 +33,9 @@ foreach (read_file $postboxes_data_file) {
     foreach (keys %h) {
 	delete $h{$_} if $h{$_} !~ /\S/;
     }
+    if ($opt_cautious) {
+	delete $h{$_} foreach qw(postcode loc1 loc2);
+    }
     push @postbox_data, \%h;
 }
 warn scalar(@postbox_data),
@@ -40,19 +46,21 @@ die if not @postbox_data;
 foreach (@postbox_data) {
     $_->{operator} = 'Royal Mail'; # might as well assume this
     my ($housenumber, $street, $postcode);
-    my $loc1 = delete($_->{loc1});
-    if ($loc1 =~ /\A(\d+) (.+) ([A-Z]+\d+)\z/) {
-	($housenumber, $street, $postcode) = ($1, $2, $3);
-    }
-    elsif ($loc1 =~ /\A(\d+) (.+)\z/) {
-	($housenumber, $street) = ($1, $2);
-    }
-    else {
-	$street = $loc1;
+    if (defined (my $loc1 = delete($_->{loc1}))) {
+	if ($loc1 =~ /\A(\d+) (.+) ([A-Z]+\d+)\z/) {
+	    ($housenumber, $street, $postcode) = ($1, $2, $3);
+	}
+	elsif ($loc1 =~ /\A(\d+) (.+)\z/) {
+	    ($housenumber, $street) = ($1, $2);
+	}
+	else {
+	    $street = $loc1;
+	}
     }
     $_->{'addr:housenumber'} = $housenumber if defined $housenumber;
     $_->{'addr:street'} = $street if defined $housenumber;
-    if (defined $postcode and $_->{postcode} !~ /\A$postcode /) {
+    if (defined $postcode and exists $_->{postcode}
+	and $_->{postcode} !~ /\A$postcode /) {
 	if ($_->{postcode} =~ /\A${postcode}(\d)\z/) {
 	    # A simple missing space, most likely.
 	    $_->{postcode} = "$postcode $1";
@@ -68,7 +76,9 @@ foreach (@postbox_data) {
     delete $_->{loc2};
 
     # Rename this to the standard OSM name.
-    $_->{postal_code} = delete $_->{postcode};
+    if (exists $_->{postcode}) {
+	$_->{postal_code} = delete $_->{postcode};
+    }
 }
 
 my @lats = map { $_->{lat} } @postbox_data;
@@ -248,9 +258,7 @@ foreach my $d (@postbox_data) {
 	= reverse sort { $a->[1] <=> $b->[1] } @osm_with_distance;
 
     if (@osm_with_distance) {
-	my $msg = sprintf
-	     'to add at (%.6f, %.6f), ref="%s", postal_code="%s"',
-	     $lat, $lon, $ref, $postal_code;
+	my $msg = sprintf 'to add at (%.6f, %.6f), ref=%s', $lat, $lon, $ref;
 	 warn "$msg\n";
 	 warn "...but has nearby OSM postboxes:\n";
 	foreach (@osm_with_distance) {
@@ -268,10 +276,10 @@ foreach my $d (@postbox_data) {
 	my %h = (
 	    id => $node_id, lat => $lat, lon => $lon,
 	    amenity => 'post_box', ref => $ref, 
-	    postal_code => $postal_code, operator => $operator,
+	    operator => $operator,
 	    source => 'dracos', 'dracos:verified' => 'no',
 	    );
-	foreach ('addr:housenumber', 'addr:street') {
+	foreach ('addr:housenumber', 'addr:street', 'postal_code') {
 	    $h{$_} = $d->{$_} if exists $d->{$_};
 	}
 	push @new_nodes, \%h;
