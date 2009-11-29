@@ -21,9 +21,9 @@ sub get_two_data_sets {
     my @dracos_data
 	= grep { ($_->{postal_code} // '') =~ /\A$postcode_prefix\s/o }
           Dracos::get_data;
-    die "no Dracos postboxes found with postcode prefix $postcode_prefix"
+    die "no Dracos postboxes found with postcode prefix $postcode_prefix\n"
 	if not @dracos_data;
-    warn scalar(@dracos_data), " Dracos postboxes found in $postcode_prefix";
+    warn scalar(@dracos_data), " Dracos postboxes found in $postcode_prefix\n";
 
     # Find the bounding box of this postcode area from the Dracos data.
     my @lats = map { $_->{lat} } @dracos_data;
