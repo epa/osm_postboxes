@@ -1,6 +1,5 @@
 #!/usr/bin/perl
 use Modern::Perl;
-use File::Slurp;
 use List::Util qw(min max);
 use List::MoreUtils qw(uniq);
 use Tie::RefHash;
@@ -8,12 +7,7 @@ use Getopt::Long;
 use Date::Manip;
 use lib '.';
 use OSM;
-
-my $postboxes_data_file = 'postboxes.tsv';
-if (not -e $postboxes_data_file) {
-    my $uri = 'http://www.dracos.co.uk/play/locating-postboxes/export.php';
-    die "$postboxes_data_file not there, fetch it from:\n$uri\n";
-}
+use Dracos;
 
 our ($opt_cautious, $opt_timestamp) = (0, 1);
 (GetOptions('cautious', 'timestamp!') && @ARGV == 1)
@@ -25,63 +19,15 @@ END
 my $postcode_prefix = shift;
 $postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
     or die "bad postcode prefix $postcode_prefix\n";
-
-# Read the Dracos file.  The fields are the same as in the header.
-my @postbox_data;
-foreach (read_file $postboxes_data_file) {
-    my %h;
-    @h{qw(ref postcode loc1 loc2 lat lon)} = split /\t/;
-    next unless $h{ref} =~ /\A$postcode_prefix\s/o;
-    die "postcode $h{postcode} does not match ref $h{ref}"
-	unless $h{postcode} =~ /\A$postcode_prefix/o;
-    foreach (keys %h) {
-	delete $h{$_} if $h{$_} !~ /\S/;
-    }
-    if ($opt_cautious) {
-	delete $h{$_} foreach qw(postcode loc1 loc2);
-    }
-    push @postbox_data, \%h;
-}
-warn scalar(@postbox_data),
-    " post boxes found in $postboxes_data_file for $postcode_prefix\n";
-die if not @postbox_data;
-
-# Process the Dracos entries breaking up the information a bit.
-foreach (@postbox_data) {
-    $_->{operator} = 'Royal Mail'; # might as well assume this
-    my ($housenumber, $street, $postcode);
-    if (defined (my $loc1 = delete($_->{loc1}))) {
-	if ($loc1 =~ /\A(\d+) (.+) ([A-Z]+\d+)\z/) {
-	    ($housenumber, $street, $postcode) = ($1, $2, $3);
-	}
-	elsif ($loc1 =~ /\A(\d+) (.+)\z/) {
-	    ($housenumber, $street) = ($1, $2);
-	}
-	else {
-	    $street = $loc1;
-	}
-    }
-    $_->{'addr:housenumber'} = $housenumber if defined $housenumber;
-    $_->{'addr:street'} = $street if defined $housenumber;
-    if (defined $postcode and exists $_->{postcode}
-	and $_->{postcode} !~ /\A$postcode /) {
-	if ($_->{postcode} =~ /\A${postcode}(\d)\z/) {
-	    # A simple missing space, most likely.
-	    $_->{postcode} = "$postcode $1";
-	}
-	else {
-	    warn "inconsistency in Dracos data: box with $_->{postcode} has $postcode in loc1\n";
-	}
-    }
-
-    # loc2, if present, gives the intersection street.  We don't do
-    # anything with this yet, since addr:street holds just the main one.
-    #
-    delete $_->{loc2};
-
-    # Rename this to the standard OSM name.
-    if (exists $_->{postcode}) {
-	$_->{postal_code} = delete $_->{postcode};
+my @postbox_data
+    = grep { ($_->{postal_code} // '') =~ /\A$postcode_prefix\s/o }
+      Dracos::get_data;
+die "no Dracos postboxes found with postcode prefix $postcode_prefix"
+    if not @postbox_data;
+warn scalar(@postbox_data), " Dracos postboxes found in $postcode_prefix";
+if ($opt_cautious) {
+    foreach (@postbox_data) {
+	delete $_->{$_} foreach qw(postal_code addr:housenumber addr:street);
     }
 }
 
