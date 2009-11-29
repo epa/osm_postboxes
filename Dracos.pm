@@ -10,9 +10,19 @@ sub get_data {
 	die "$postboxes_data_file not there, fetch it from:\n$uri\n";
     }
 
-    # Read the Dracos file.  The fields are the same as in the header.
+    # Read the Dracos file and check the header line.
+    my @lines = read_file $postboxes_data_file;
+    die "$postboxes_data_file is empty" if not @lines;
+    my @header = split /\t/, lc(shift @lines);
+    my @expected = qw(ref pc loc1 loc2 latitude longitude);
+    die "too short header: @header" if @header < @expected;
+    @header = @header[0 .. $#expected];
+    die "bad header (@header), expected (@expected)"
+	if not (@header ~~ @expected);
+
+    # Remaining lines are data.
     my @postbox_data;
-    foreach (read_file $postboxes_data_file) {
+    foreach (@lines) {
 	my %h;
 	@h{qw(ref postcode loc1 loc2 lat lon)} = split /\t/;
 	foreach (keys %h) {
