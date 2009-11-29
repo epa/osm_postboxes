@@ -15,9 +15,13 @@ if (not -e $postboxes_data_file) {
     die "$postboxes_data_file not there, fetch it from:\n$uri\n";
 }
 
-our $opt_cautious;
-(GetOptions('cautious') && @ARGV == 1)
-    or die "usage: $0 [--cautious] postcode-prefix\ne.g. $0 E10\n";
+our ($opt_cautious, $opt_timestamp) = (0, 1);
+(GetOptions('cautious', 'timestamp!') && @ARGV == 1)
+    or die <<END
+usage: $0 [--cautious] [--no-timestamp] postcode-prefix
+e.g. $0 E10
+END
+    ;
 my $postcode_prefix = shift;
 $postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
     or die "bad postcode prefix $postcode_prefix\n";
@@ -298,7 +302,8 @@ foreach (@osm_postbox_nodes) {
     warn "$_->{id}: not in Dracos data\n";
 }
 
-my $timestamp = UnixDate 'now', '%O'; # FIXME requires UTC time
+my $timestamp;
+$timestamp = UnixDate 'now', '%O' if $opt_timestamp; # FIXME requires UTC time
 my $changeset = 999;
 sub write_node {
     my %h = %{shift()};
@@ -307,7 +312,7 @@ sub write_node {
     my %a;
     $a{$_} = delete $h{$_} foreach qw(id lat lon version);
     $a{version} //= 0;
-    $a{timestamp} = $timestamp;
+    $a{timestamp} = $timestamp if $opt_timestamp;
     $a{changeset} = $changeset;
     my $attr_str
 	= join ' ', map { $_ . '="' . delete($a{$_}) . '"' } sort keys %a;
