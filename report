@@ -1,0 +1,49 @@
+#!/usr/bin/perl
+use Modern::Perl;
+use lib '.';
+use Postboxes;
+use OSM;
+
+use constant PADDING_METRES => 100;
+
+die "usage: $0 postcode-prefix" if @ARGV != 1;
+my $postcode_prefix = shift;
+my (@dracos_data, @osm_data);
+{
+    my ($dr, $or)
+	= Postboxes::get_two_data_sets $postcode_prefix, PADDING_METRES;
+    @dracos_data = @$dr;
+    @osm_data = @$or;
+}
+
+sub by_ref {
+    my %h;
+    foreach (@_) {
+	my $ref = $_->{ref};
+	next if not defined $ref;
+	warn "seen two nodes with ref $ref" if exists $h{$ref};
+	$h{$ref} = $_;
+    }
+    return %h;
+}
+
+my %dracos_by_ref = by_ref @dracos_data;
+my %osm_by_ref = by_ref @osm_data;
+
+{
+    my $count_dracos = scalar @dracos_data;
+    my $count_dracos_with_ref = scalar keys %dracos_by_ref;
+    my $count_osm = scalar @osm_data;
+    my $count_osm_with_ref = scalar keys %osm_by_ref;
+    say "$postcode_prefix: Dracos $count_dracos ($count_dracos_with_ref with ref), OSM $count_osm ($count_osm_with_ref with ref)";
+}
+
+foreach my $ref (keys %dracos_by_ref) {
+    my $d = $dracos_by_ref{$ref};
+    my $o = $osm_by_ref{$ref};
+    next if not $o;
+    my $distance = OSM::distance $d->{lat}, $d->{lon}, $o->{lat}, $o->{lon};
+    $distance = int $distance;
+    say "$ref: $distance";
+}
+
