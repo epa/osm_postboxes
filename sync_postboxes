@@ -9,6 +9,44 @@ use lib '.';
 use OSM;
 use Dracos;
 
+# Maximum distance for matching two postbox positions.
+my $MAX_DISTANCE = 100;
+
+# Given a postcode prefix such as 'E10', return
+#   listref of Dracos data, in OSM-ish format (hash with lat, lon, and tags)
+#   listref of OSM data, in same format
+#
+sub get_two_data_sets {
+    my $postcode_prefix = shift;
+
+    # Get Dracos nodes for this prefix.
+    my @dracos_data
+	= grep { ($_->{postal_code} // '') =~ /\A$postcode_prefix\s/o }
+          Dracos::get_data;
+    die "no Dracos postboxes found with postcode prefix $postcode_prefix"
+	if not @dracos_data;
+    warn scalar(@dracos_data), " Dracos postboxes found in $postcode_prefix";
+
+    # Find the bounding box of this postcode area from the Dracos data.
+    my @lats = map { $_->{lat} } @dracos_data;
+    my @lons = map { $_->{lon} } @dracos_data;
+    my @bbox = (min(@lons), min(@lats), max(@lons), max(@lats));
+
+    # Enlarge it a little and fetch the OSM data.
+    @bbox = OSM::pad_bbox $MAX_DISTANCE, @bbox;
+    OSM::show_slippy_map_link_for_bbox @bbox;
+    my $data = OSM::get_area_bbox @bbox;
+
+    # Parse the OSM data and get postboxes.
+    my @nodes = OSM::parse_nodes $data;
+    my @osm_postbox_nodes
+	= grep { exists $_->{amenity} and $_->{amenity} eq 'post_box' } @nodes;
+    warn scalar(@osm_postbox_nodes) . " nearby post boxes found in OSM\n";
+
+    return (\@dracos_data, \@osm_postbox_nodes);
+}
+
+# Get and validate command-line options.
 our ($opt_cautious, $opt_timestamp) = (0, 1);
 (GetOptions('cautious', 'timestamp!') && @ARGV == 1)
     or die <<END
@@ -19,33 +57,21 @@ END
 my $postcode_prefix = shift;
 $postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
     or die "bad postcode prefix $postcode_prefix\n";
-my @dracos_data
-    = grep { ($_->{postal_code} // '') =~ /\A$postcode_prefix\s/o }
-      Dracos::get_data;
-die "no Dracos postboxes found with postcode prefix $postcode_prefix"
-    if not @dracos_data;
-warn scalar(@dracos_data), " Dracos postboxes found in $postcode_prefix";
+
+# Fetch the data from both sources.
+my (@dracos_data, @osm_postbox_nodes);
+{
+    my ($dr, $or) = get_two_data_sets $postcode_prefix;
+    @dracos_data = @$dr;
+    @osm_postbox_nodes = @$or;
+}
+
+# In --cautious mode we do not use the Post Office's address info.
 if ($opt_cautious) {
     foreach (@dracos_data) {
 	delete $_->{$_} foreach qw(postal_code addr:housenumber addr:street);
     }
 }
-
-# Maximum distance for matching two postbox positions.
-my $MAX_DISTANCE = 100;
-
-my @lats = map { $_->{lat} } @dracos_data;
-my @lons = map { $_->{lon} } @dracos_data;
-my @bbox = (min(@lons), min(@lats), max(@lons), max(@lats));
-@bbox = OSM::pad_bbox $MAX_DISTANCE, @bbox;
-OSM::show_slippy_map_link_for_bbox @bbox;
-my $data = OSM::get_area_bbox @bbox;
-
-warn "parsing\n";
-my @nodes = OSM::parse_nodes $data;
-my @osm_postbox_nodes
-    = grep { exists $_->{amenity} and $_->{amenity} eq 'post_box' } @nodes;
-warn scalar(@osm_postbox_nodes) . " nearby post boxes found in OSM\n";
 
 # Given one data point, find the closest to it in a list of others,
 # subject to $MAX_DISTANCE.
