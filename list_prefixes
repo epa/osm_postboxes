@@ -1,0 +1,14 @@
+#!/usr/bin/perl
+use Modern::Perl;
+use lib '.';
+use Dracos;
+my %seen;
+foreach (Dracos::get_data) {
+    my $pc = $_->{postal_code};
+    next if not defined $pc;
+    $pc =~ /\A(\S+)/ or die "bad postal code $pc";
+    my $prefix = $1;
+    ++$seen{$prefix};
+}
+say $_ foreach sort keys %seen;
+
