@@ -8,6 +8,14 @@ use File::Slurp;
 my $BASE_URI = 'http://api.openstreetmap.org/api/0.6/';
 our $Cache = 1;
 
+sub show_slippy_map_link_for_bbox {
+    my ($got_centre_lat, $got_centre_lon, $zoom) = &bbox_to_zoom;
+    my $uri
+	= sprintf 'http://www.openstreetmap.org/?lat=%.6f&lon=%.6f&zoom=%d',
+	$got_centre_lat, $got_centre_lon, $zoom;
+    warn "<$uri>\n";
+}
+
 sub get_area_bbox {
     my ($left, $bottom, $right, $top) = @_;
     croak 'bad bbox: left > right' if $left > $right;

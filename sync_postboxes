@@ -60,16 +60,9 @@ die "too large an area to fetch: $corner_distance metres corner to corner\n"
     if $corner_distance > $MAX_FETCH_SIZE;
 warn "fetching area $corner_distance metres from corner to corner\n";
 
-{
-    my ($got_centre_lat, $got_centre_lon, $zoom)
-	= OSM::bbox_to_zoom($min_lon, $min_lat, $max_lon, $max_lat);
-    my $uri
-	= sprintf 'http://www.openstreetmap.org/?lat=%.6f&lon=%.6f&zoom=%d',
-	$got_centre_lat, $got_centre_lon, $zoom;
-    warn "<$uri>\n";
-}
-
-my $data = OSM::get_area_bbox $min_lon, $min_lat, $max_lon, $max_lat;
+my @bbox = ($min_lon, $min_lat, $max_lon, $max_lat);
+OSM::show_slippy_map_link_for_bbox @bbox;
+my $data = OSM::get_area_bbox @bbox;
 
 warn "parsing\n";
 my @nodes = OSM::parse_nodes $data;
