@@ -17,8 +17,6 @@ e.g. $0 E10
 END
     ;
 my $postcode_prefix = shift;
-$postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
-    or die "bad postcode prefix $postcode_prefix\n";
 
 # Maximum distance for matching two postbox positions.
 my $MAX_DISTANCE = 100;

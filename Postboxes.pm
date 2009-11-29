@@ -14,6 +14,8 @@ use Dracos;
 #
 sub get_two_data_sets {
     my ($postcode_prefix, $padding) = @_;
+    $postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
+	or die "bad postcode prefix $postcode_prefix\n";
 
     # Get Dracos nodes for this prefix.
     my @dracos_data
