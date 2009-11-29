@@ -75,6 +75,22 @@ sub height_to_lat_degrees {
     return $width / one_degree_lat($lat, $lon);
 }
 
+# Pad a bounding box by N metres on all sides.
+sub pad_bbox {
+    my ($n, $left, $bottom, $right, $top) = @_;
+    my $centre_lat = ($bottom + $top) / 2;
+    my $centre_lon = ($left + $right) / 2;
+    my $padding_lat
+	= height_to_lat_degrees $centre_lat, $centre_lon, $n;
+    my $padding_lon
+	= width_to_lon_degrees $centre_lat, $centre_lon, $n;
+    $bottom -= $padding_lat;
+    $top += $padding_lat;
+    $left -= $padding_lon;
+    $right += $padding_lon;
+    return ($left, $bottom, $right, $top);
+}
+
 sub get_area_centre {
     my ($centre_lat, $centre_lon, $width, $height) = @_;
     my $cosine = cos(deg2rad($centre_lat));

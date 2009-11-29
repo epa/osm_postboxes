@@ -31,29 +31,13 @@ if ($opt_cautious) {
     }
 }
 
-my @lats = map { $_->{lat} } @postbox_data;
-my @lons = map { $_->{lon} } @postbox_data;
-my $min_lat = min @lats;
-my $max_lat = max @lats;
-my $min_lon = min @lons;
-my $max_lon = max @lons;
-
 # Maximum distance for matching two postbox positions.
 my $MAX_DISTANCE = 100;
 
-# Pad the bounding box to find postboxes near the positions given.
-my $centre_lat = ($min_lat + $max_lat) / 2;
-my $centre_lon = ($min_lon + $max_lon) / 2;
-my $padding_lat
-    = OSM::height_to_lat_degrees $centre_lat, $centre_lon, $MAX_DISTANCE;
-my $padding_lon
-    = OSM::width_to_lon_degrees $centre_lat, $centre_lon, $MAX_DISTANCE;
-$min_lat -= $padding_lat;
-$max_lat += $padding_lat;
-$min_lon -= $padding_lon;
-$max_lon += $padding_lon;
-
-my @bbox = ($min_lon, $min_lat, $max_lon, $max_lat);
+my @lats = map { $_->{lat} } @postbox_data;
+my @lons = map { $_->{lon} } @postbox_data;
+my @bbox = (min(@lons), min(@lats), max(@lons), max(@lats));
+@bbox = OSM::pad_bbox $MAX_DISTANCE, @bbox;
 OSM::show_slippy_map_link_for_bbox @bbox;
 my $data = OSM::get_area_bbox @bbox;
 
