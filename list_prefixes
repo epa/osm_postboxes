@@ -10,5 +10,8 @@ foreach (Dracos::get_data) {
     my $prefix = $1;
     ++$seen{$prefix};
 }
-say $_ foreach sort keys %seen;
+foreach (sort { $seen{$b} <=> $seen{$a} || $a cmp $b } keys %seen) {
+    say "$_: $seen{$_}";
+}
+
 
