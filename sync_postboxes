@@ -53,13 +53,6 @@ $max_lat += $padding_lat;
 $min_lon -= $padding_lon;
 $max_lon += $padding_lon;
 
-# Sanity check we're not getting too much.
-my $MAX_FETCH_SIZE = 30_000;
-my $corner_distance = int OSM::distance $min_lat, $min_lon, $max_lat, $max_lon;
-die "too large an area to fetch: $corner_distance metres corner to corner\n"
-    if $corner_distance > $MAX_FETCH_SIZE;
-warn "fetching area $corner_distance metres from corner to corner\n";
-
 my @bbox = ($min_lon, $min_lat, $max_lon, $max_lat);
 OSM::show_slippy_map_link_for_bbox @bbox;
 my $data = OSM::get_area_bbox @bbox;

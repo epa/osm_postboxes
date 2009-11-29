@@ -16,19 +16,6 @@ sub show_slippy_map_link_for_bbox {
     warn "<$uri>\n";
 }
 
-sub get_area_bbox {
-    my ($left, $bottom, $right, $top) = @_;
-    croak 'bad bbox: left > right' if $left > $right;
-    croak 'bad bbox: bottom > top' if $bottom >= $top;
-    my $bbox = "$left,$bottom,$right,$top";
-    my $uri = $BASE_URI . "map?bbox=$bbox";
-    my $cache = "cache.$bbox";
-    return read_file $cache if $Cache and -e $cache;
-    my $got = get($uri) //  die "could not get $uri";
-    write_file $cache, $got if $Cache;
-    return $got;
-}
-
 # Given a position return the size in metres of one degree of
 # longitude / latitude centred at that position.
 #
@@ -53,6 +40,26 @@ sub distance {
     my $height = $lat_diff * one_degree_lat($average_lat, $average_lon);
     my $width = $lon_diff * one_degree_lon($average_lat, $average_lon);
     return sqrt($height ** 2 + $width ** 2);
+}
+
+sub get_area_bbox {
+    my ($left, $bottom, $right, $top) = @_;
+    croak 'bad bbox: left > right' if $left > $right;
+    croak 'bad bbox: bottom > top' if $bottom >= $top;
+
+    # Sanity check we're not getting too much.
+    my $MAX_FETCH_SIZE = 30_000;
+    my $corner_distance = int distance $bottom, $left, $top, $right;
+    die "too large an area to fetch: $corner_distance metres corner to corner\n"
+	if $corner_distance > $MAX_FETCH_SIZE;
+
+    my $bbox = "$left,$bottom,$right,$top";
+    my $uri = $BASE_URI . "map?bbox=$bbox";
+    my $cache = "cache.$bbox";
+    return read_file $cache if $Cache and -e $cache;
+    my $got = get($uri) //  die "could not get $uri";
+    write_file $cache, $got if $Cache;
+    return $got;
 }
 
 # Utility functions to convert width and height to degrees of
