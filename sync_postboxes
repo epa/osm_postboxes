@@ -19,14 +19,14 @@ END
 my $postcode_prefix = shift;
 $postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
     or die "bad postcode prefix $postcode_prefix\n";
-my @postbox_data
+my @dracos_data
     = grep { ($_->{postal_code} // '') =~ /\A$postcode_prefix\s/o }
       Dracos::get_data;
 die "no Dracos postboxes found with postcode prefix $postcode_prefix"
-    if not @postbox_data;
-warn scalar(@postbox_data), " Dracos postboxes found in $postcode_prefix";
+    if not @dracos_data;
+warn scalar(@dracos_data), " Dracos postboxes found in $postcode_prefix";
 if ($opt_cautious) {
-    foreach (@postbox_data) {
+    foreach (@dracos_data) {
 	delete $_->{$_} foreach qw(postal_code addr:housenumber addr:street);
     }
 }
@@ -34,8 +34,8 @@ if ($opt_cautious) {
 # Maximum distance for matching two postbox positions.
 my $MAX_DISTANCE = 100;
 
-my @lats = map { $_->{lat} } @postbox_data;
-my @lons = map { $_->{lon} } @postbox_data;
+my @lats = map { $_->{lat} } @dracos_data;
+my @lons = map { $_->{lon} } @dracos_data;
 my @bbox = (min(@lons), min(@lats), max(@lons), max(@lats));
 @bbox = OSM::pad_bbox $MAX_DISTANCE, @bbox;
 OSM::show_slippy_map_link_for_bbox @bbox;
@@ -70,14 +70,14 @@ sub find_closest {
 # Find unambiguous is-closest-to matches.
 my %closest_osm_to_dracos;
 tie %closest_osm_to_dracos, 'Tie::RefHash' or die;
-foreach (@postbox_data) {
+foreach (@dracos_data) {
     my $closest = find_closest $_, @osm_postbox_nodes;
     $closest_osm_to_dracos{$_} = $closest if $closest;
 }
 my %closest_dracos_to_osm;
 tie %closest_dracos_to_osm, 'Tie::RefHash' or die;
 foreach (@osm_postbox_nodes) {
-    my $closest = find_closest $_, @postbox_data;
+    my $closest = find_closest $_, @dracos_data;
     $closest_dracos_to_osm{$_} = $closest if $closest;
 }
 my @unambiguous;
@@ -160,7 +160,7 @@ foreach (@unambiguous) {
 
 my @new_nodes;
 my %suggested;
-foreach my $d (@postbox_data) {
+foreach my $d (@dracos_data) {
     next if $has_unambiguous{$d};
     my $lat = $d->{lat};
     my $lon = $d->{lon};
