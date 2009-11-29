@@ -22,12 +22,12 @@ my $postcode_prefix = shift;
 my $MAX_DISTANCE = 100;
 
 # Fetch the data from both sources.
-my (@dracos_data, @osm_postbox_nodes);
+my (@dracos_data, @osm_data);
 {
     my ($dr, $or)
 	= Postboxes::get_two_data_sets $postcode_prefix, $MAX_DISTANCE;
     @dracos_data = @$dr;
-    @osm_postbox_nodes = @$or;
+    @osm_data = @$or;
 }
 
 # In --cautious mode we do not use the Post Office's address info.
@@ -61,12 +61,12 @@ sub find_closest {
 my %closest_osm_to_dracos;
 tie %closest_osm_to_dracos, 'Tie::RefHash' or die;
 foreach (@dracos_data) {
-    my $closest = find_closest $_, @osm_postbox_nodes;
+    my $closest = find_closest $_, @osm_data;
     $closest_osm_to_dracos{$_} = $closest if $closest;
 }
 my %closest_dracos_to_osm;
 tie %closest_dracos_to_osm, 'Tie::RefHash' or die;
-foreach (@osm_postbox_nodes) {
+foreach (@osm_data) {
     my $closest = find_closest $_, @dracos_data;
     $closest_dracos_to_osm{$_} = $closest if $closest;
 }
@@ -162,7 +162,7 @@ foreach my $d (@dracos_data) {
     # Find nearby unmatched OSM nodes.
     my @osm_with_distance
 	= map { [ $_, OSM::distance $lat, $lon, $_->{lat}, $_->{lon} ] }
-    @osm_postbox_nodes;
+    @osm_data;
     @osm_with_distance = grep { $_->[1] <= $MAX_DISTANCE } @osm_with_distance;
     @osm_with_distance
 	= reverse sort { $a->[1] <=> $b->[1] } @osm_with_distance;
@@ -199,7 +199,7 @@ foreach my $d (@dracos_data) {
 # Don't warn about every OSM box in that rectangle, just those that
 # have the ref asked for.  (TODO find a convex hull or something.)
 #
-foreach (@osm_postbox_nodes) {
+foreach (@osm_data) {
     next if $has_unambiguous{$_};
     next if $suggested{$_};
     my $ref = $_->{ref};
