@@ -9,15 +9,15 @@ use lib '.';
 use OSM;
 use Dracos;
 
-# Maximum distance for matching two postbox positions.
-my $MAX_DISTANCE = 100;
-
-# Given a postcode prefix such as 'E10', return
+# Given a postcode prefix such as 'E10' and an amount of padding in metres,
+# return
 #   listref of Dracos data, in OSM-ish format (hash with lat, lon, and tags)
 #   listref of OSM data, in same format
+# The padding is there to fetch a slightly larger area from OSM than the
+# bounding box of the Dracos nodes.
 #
 sub get_two_data_sets {
-    my $postcode_prefix = shift;
+    my ($postcode_prefix, $padding) = @_;
 
     # Get Dracos nodes for this prefix.
     my @dracos_data
@@ -33,7 +33,7 @@ sub get_two_data_sets {
     my @bbox = (min(@lons), min(@lats), max(@lons), max(@lats));
 
     # Enlarge it a little and fetch the OSM data.
-    @bbox = OSM::pad_bbox $MAX_DISTANCE, @bbox;
+    @bbox = OSM::pad_bbox $padding, @bbox;
     OSM::show_slippy_map_link_for_bbox @bbox;
     my $data = OSM::get_area_bbox @bbox;
 
@@ -58,10 +58,13 @@ my $postcode_prefix = shift;
 $postcode_prefix =~ /\A[A-Z]+[0-9]+\z/
     or die "bad postcode prefix $postcode_prefix\n";
 
+# Maximum distance for matching two postbox positions.
+my $MAX_DISTANCE = 100;
+
 # Fetch the data from both sources.
 my (@dracos_data, @osm_postbox_nodes);
 {
-    my ($dr, $or) = get_two_data_sets $postcode_prefix;
+    my ($dr, $or) = get_two_data_sets $postcode_prefix, $MAX_DISTANCE;
     @dracos_data = @$dr;
     @osm_postbox_nodes = @$or;
 }
